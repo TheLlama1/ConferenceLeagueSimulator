@@ -1,14 +1,15 @@
 from dataclasses import dataclass
 import random
 
-@dataclass 
+@dataclass
 class KnockoutTie:
-    tie_id: int
+    tie_id: str
     round_name: str
     seeded_team_id: int
     unseeded_team_id: int
     first_leg_home_id: int
     second_leg_home_id: int
+    bracket_position: int | None = None
 
 def draw_playoff_ties(teams, standings, seed=None):
     if len(standings) != 36:
@@ -112,8 +113,8 @@ class KnockoutResult:
     extra_time_home_goals: int = 0
     extra_time_away_goals: int = 0
 
-    penalties_home_goals: int | None = None
-    penalties_away_goals: int | None = None
+    penalties_home: int | None = None
+    penalties_away: int | None = None
 
     winner_id: int | None = None
     decided_by: str = ""
@@ -121,6 +122,39 @@ class KnockoutResult:
     home_team_id: int = 0
     away_team_id: int = 0
 
+    @property
+    def penalties_home_goals(self):
+        return self.penalties_home
+
+    @penalties_home_goals.setter
+    def penalties_home_goals(self, value):
+        self.penalties_home = value
+
+    @property
+    def penalties_away_goals(self):
+        return self.penalties_away
+
+    @penalties_away_goals.setter
+    def penalties_away_goals(self, value):
+        self.penalties_away = value
+
+
+@dataclass
+class FinalResult:
+    team1_id: int
+    team2_id: int
+
+    team1_goals: int
+    team2_goals: int
+
+    extra_time_team1_goals: int = 0
+    extra_time_team2_goals: int = 0
+
+    penalties_team1: int | None = None
+    penalties_team2: int | None = None
+
+    winner_id: int | None = None
+    decided_by: str = ""
 
 def simulate_penalty_shootout(home_team, away_team, rng):
     """
@@ -268,26 +302,13 @@ def simulate_two_legged_tie(teams, tie, simulator):
     return result
 
 
+
 def draw_round_of_16(teams, standings, playoff_ties, playoff_results, seed=None):
-    """
-    Creates the eight Round of 16 ties.
-
-    playoff_results must be a dictionary:
-        {
-            "PO1": KnockoutResult(...),
-            "PO2": KnockoutResult(...),
-            ...
-        }
-    """
-
     if len(standings) != 36:
         raise ValueError("Expected standings for 36 teams.")
 
-    if len(playoff_ties) != 8:
-        raise ValueError("Expected exactly 8 play-off ties.")
-
-    if len(playoff_results) != 8:
-        raise ValueError("Expected results for all 8 play-off ties.")
+    if len(playoff_ties) != 8 or len(playoff_results) != 8:
+        raise ValueError("Expected 8 play-off ties and results.")
 
     rng = random.Random(seed)
 
@@ -298,8 +319,6 @@ def draw_round_of_16(teams, standings, playoff_ties, playoff_results, seed=None)
         for position, team_id in enumerate(ranked_ids, start=1)
     }
 
-    # Find the play-off winners, grouped by the league positions
-    # of the seeded teams they defeated.
     playoff_winners = {
         (9, 10): [],
         (11, 12): [],
@@ -308,7 +327,6 @@ def draw_round_of_16(teams, standings, playoff_ties, playoff_results, seed=None)
     }
 
     for tie in playoff_ties:
-
         result = playoff_results.get(tie.tie_id)
 
         if result is None or result.winner_id is None:
@@ -320,7 +338,10 @@ def draw_round_of_16(teams, standings, playoff_ties, playoff_results, seed=None)
         ):
             raise ValueError(f"Invalid winner in {tie.tie_id}")
 
-        seeded_position = position_by_team[tie.seeded_team_id]
+        seeded_position = position_by_team.get(tie.seeded_team_id)
+
+        if seeded_position is None:
+            raise ValueError("Unknown seeded team.")
 
         if 9 <= seeded_position <= 10:
             group = (9, 10)
@@ -335,20 +356,18 @@ def draw_round_of_16(teams, standings, playoff_ties, playoff_results, seed=None)
 
         playoff_winners[group].append(result.winner_id)
 
-    # Each top-eight pair faces the winners from a corresponding
-    # play-off position group.
+    # Each seeded pair is split across the two sides of the bracket.
+    # The slot numbers determine the later quarter-final pairings.
     bracket_groups = [
-        ((1, 2), (15, 16)),
-        ((3, 4), (13, 14)),
-        ((5, 6), (11, 12)),
-        ((7, 8), (9, 10))
+        ((1, 2), (15, 16), (4, 8)),
+        ((3, 4), (13, 14), (2, 6)),
+        ((5, 6), (11, 12), (1, 5)),
+        ((7, 8), (9, 10), (3, 7))
     ]
 
     round_of_16_ties = []
-    tie_number = 1
 
-    for seeded_positions, playoff_group in bracket_groups:
-
+    for seeded_positions, playoff_group, slots in bracket_groups:
         seeded_teams = [
             ranked_ids[position - 1]
             for position in seeded_positions
@@ -358,32 +377,35 @@ def draw_round_of_16(teams, standings, playoff_ties, playoff_results, seed=None)
 
         if len(unseeded_teams) != 2:
             raise ValueError(
-                f"Expected 2 winners from play-off group {playoff_group}."
+                f"Expected 2 winners from group {playoff_group}."
             )
 
-        # Randomly allocate teams to the two bracket positions.
         rng.shuffle(seeded_teams)
         rng.shuffle(unseeded_teams)
 
-        for seeded_id, unseeded_id in zip(
+        for slot, seeded_id, unseeded_id in zip(
+            slots,
             seeded_teams,
             unseeded_teams
         ):
+            if seeded_id not in teams or unseeded_id not in teams:
+                raise ValueError("Unknown team in Round of 16 draw.")
 
             round_of_16_ties.append(
                 KnockoutTie(
-                    tie_id=f"R16-{tie_number}",
+                    tie_id=f"R16-{slot}",
                     round_name="Round of 16",
                     seeded_team_id=seeded_id,
                     unseeded_team_id=unseeded_id,
                     first_leg_home_id=unseeded_id,
-                    second_leg_home_id=seeded_id
+                    second_leg_home_id=seeded_id,
+                    bracket_position=slot
                 )
             )
 
-            tie_number += 1
-
     return round_of_16_ties
+
+
 
 
 def simulate_knockout_round(teams, ties, simulator):
@@ -401,3 +423,194 @@ def simulate_knockout_round(teams, ties, simulator):
         results[tie.tie_id] = result
 
     return results
+
+
+
+def draw_quarter_finals(teams, r16_ties, r16_results):
+    if len(r16_ties) != 8:
+        raise ValueError("Expected exactly 8 Round of 16 ties.")
+
+    winners_by_slot = {}
+
+    for tie in r16_ties:
+        slot = tie.bracket_position
+
+        if slot is None or slot not in range(1, 9):
+            raise ValueError(f"Invalid bracket position in {tie.tie_id}.")
+
+        if slot in winners_by_slot:
+            raise ValueError(f"Duplicate bracket position: {slot}")
+
+        result = r16_results.get(tie.tie_id)
+
+        if result is None or result.winner_id is None:
+            raise ValueError(f"Missing winner for {tie.tie_id}")
+
+        if result.winner_id not in (
+            tie.seeded_team_id,
+            tie.unseeded_team_id
+        ):
+            raise ValueError(f"Invalid winner in {tie.tie_id}")
+
+        winners_by_slot[slot] = result.winner_id
+
+    if set(winners_by_slot) != set(range(1, 9)):
+        raise ValueError("Some Round of 16 positions are missing.")
+
+    # Adjacent Round of 16 positions meet in each quarter-final.
+    quarter_final_paths = [
+        ("QF1", 1, 2),
+        ("QF2", 3, 4),
+        ("QF3", 5, 6),
+        ("QF4", 7, 8)
+    ]
+
+    quarter_final_ties = []
+
+    for position, (tie_id, first_slot, second_slot) in enumerate(
+        quarter_final_paths,
+        start=1
+    ):
+        first_team_id = winners_by_slot[first_slot]
+        second_team_id = winners_by_slot[second_slot]
+
+        quarter_final_ties.append(
+            KnockoutTie(
+                tie_id=tie_id,
+                round_name="Quarter-finals",
+                seeded_team_id=second_team_id,
+                unseeded_team_id=first_team_id,
+                first_leg_home_id=first_team_id,
+                second_leg_home_id=second_team_id,
+                bracket_position=position
+            )
+        )
+
+    return quarter_final_ties
+
+def draw_semi_finals(teams, quarter_final_ties, quarter_final_results):
+    if len(quarter_final_ties) != 4:
+        raise ValueError("Expected exactly 4 quarter-final ties.")
+
+    winners = {}
+
+    for tie in quarter_final_ties:
+        result = quarter_final_results.get(tie.tie_id)
+
+        if result is None or result.winner_id is None:
+            raise ValueError(f"Missing winner for {tie.tie_id}")
+
+        if result.winner_id not in (
+            tie.seeded_team_id,
+            tie.unseeded_team_id
+        ):
+            raise ValueError(f"Invalid winner in {tie.tie_id}")
+
+        winners[tie.tie_id] = result.winner_id
+
+    required_ties = {"QF1", "QF2", "QF3", "QF4"}
+
+    if set(winners) != required_ties:
+        raise ValueError("Quarter-final results are incomplete.")
+
+    # QF2 and QF4 winners occupy the top-two bracket paths.
+    semi_final_paths = [
+        ("SF1", "QF1", "QF2"),
+        ("SF2", "QF3", "QF4")
+    ]
+
+    semi_final_ties = []
+
+    for position, (tie_id, first_path, second_path) in enumerate(
+        semi_final_paths,
+        start=1
+    ):
+        first_team_id = winners[first_path]
+        second_team_id = winners[second_path]
+
+        semi_final_ties.append(
+            KnockoutTie(
+                tie_id=tie_id,
+                round_name="Semi-finals",
+                seeded_team_id=second_team_id,
+                unseeded_team_id=first_team_id,
+                first_leg_home_id=first_team_id,
+                second_leg_home_id=second_team_id,
+                bracket_position=position
+            )
+        )
+
+    return semi_final_ties
+
+
+def simulate_final(teams, finalist_ids, simulator):
+    if len(finalist_ids) != 2:
+        raise ValueError("The final must have exactly 2 teams.")
+
+    if finalist_ids[0] == finalist_ids[1]:
+        raise ValueError("A team cannot play against itself.")
+
+    if any(team_id not in teams for team_id in finalist_ids):
+        raise ValueError("Unknown finalist.")
+
+    team1 = teams[finalist_ids[0]]
+    team2 = teams[finalist_ids[1]]
+
+    team1_goals, team2_goals = simulator.simulate_score(
+        team1,
+        team2,
+        neutral=True
+    )
+
+    result = FinalResult(
+        team1_id=team1.team_id,
+        team2_id=team2.team_id,
+        team1_goals=team1_goals,
+        team2_goals=team2_goals
+    )
+
+    if team1_goals == team2_goals:
+        expected1, expected2 = simulator.expected_goals(
+            team1,
+            team2,
+            neutral=True
+        )
+
+        extra1 = simulator.poisson_sample(expected1 / 3)
+        extra2 = simulator.poisson_sample(expected2 / 3)
+
+        result.extra_time_team1_goals = extra1
+        result.extra_time_team2_goals = extra2
+
+        team1_goals += extra1
+        team2_goals += extra2
+
+        if team1_goals > team2_goals:
+            result.winner_id = team1.team_id
+            result.decided_by = "Extra time"
+
+        elif team2_goals > team1_goals:
+            result.winner_id = team2.team_id
+            result.decided_by = "Extra time"
+
+        else:
+            winner_id, penalties1, penalties2 = simulate_penalty_shootout(
+                team1,
+                team2,
+                simulator.rng
+            )
+
+            result.winner_id = winner_id
+            result.penalties_team1 = penalties1
+            result.penalties_team2 = penalties2
+            result.decided_by = "Penalties"
+
+    else:
+        if team1_goals > team2_goals:
+            result.winner_id = team1.team_id
+        else:
+            result.winner_id = team2.team_id
+
+        result.decided_by = "90 minutes"
+
+    return result

@@ -7,9 +7,11 @@ from src.knockout import (
     draw_playoff_ties,
     simulate_knockout_round,
     draw_round_of_16,
+    draw_quarter_finals,
+    draw_semi_finals,
+    simulate_final,
     display_playoff_draw
 )
-
 
 ROOT = Path(__file__).resolve().parent
 
@@ -89,3 +91,153 @@ for tie in r16_ties:
     )
 
 print("\nQualified teams:", len(quarter_finalists))
+
+
+# STEP 6: Draw the quarter-finals.
+quarter_final_ties = draw_quarter_finals(
+    teams,
+    r16_ties,
+    r16_results
+)
+
+print("\n" + "=" * 65)
+print("                  QUARTER-FINAL DRAW")
+print("=" * 65)
+
+for tie in quarter_final_ties:
+    print(f"\n{tie.tie_id}")
+
+    print(
+        f"First leg:  "
+        f"{teams[tie.first_leg_home_id].name} (HOME) vs "
+        f"{teams[tie.second_leg_home_id].name}"
+    )
+
+    print(
+        f"Second leg: "
+        f"{teams[tie.second_leg_home_id].name} (HOME) vs "
+        f"{teams[tie.first_leg_home_id].name}"
+    )
+
+
+# STEP 7: Simulate the quarter-finals.
+quarter_final_results = simulate_knockout_round(
+    teams,
+    quarter_final_ties,
+    simulator
+)
+
+print("\n" + "=" * 65)
+print("                  SEMI-FINALISTS")
+print("=" * 65)
+
+for tie in quarter_final_ties:
+    result = quarter_final_results[tie.tie_id]
+    winner = teams[result.winner_id]
+
+    print(
+        f"{tie.tie_id}: {winner.name} "
+        f"(Decided by: {result.decided_by})"
+    )
+
+print("\nQualified teams:", len(quarter_final_results))
+
+
+# STEP 8: Draw the semi-finals.
+semi_final_ties = draw_semi_finals(
+    teams,
+    quarter_final_ties,
+    quarter_final_results
+)
+
+print("\n" + "=" * 65)
+print("                   SEMI-FINAL DRAW")
+print("=" * 65)
+
+for tie in semi_final_ties:
+    print(f"\n{tie.tie_id}")
+
+    print(
+        f"First leg:  "
+        f"{teams[tie.first_leg_home_id].name} (HOME) vs "
+        f"{teams[tie.second_leg_home_id].name}"
+    )
+
+    print(
+        f"Second leg: "
+        f"{teams[tie.second_leg_home_id].name} (HOME) vs "
+        f"{teams[tie.first_leg_home_id].name}"
+    )
+
+
+# STEP 9: Simulate the semi-finals.
+semi_final_results = simulate_knockout_round(
+    teams,
+    semi_final_ties,
+    simulator
+)
+
+print("\n" + "=" * 65)
+print("                    FINALISTS")
+print("=" * 65)
+
+finalists = []
+
+for tie in semi_final_ties:
+    result = semi_final_results[tie.tie_id]
+    winner = teams[result.winner_id]
+
+    finalists.append(winner.team_id)
+
+    print(
+        f"{tie.tie_id}: {winner.name} "
+        f"(Decided by: {result.decided_by})"
+    )
+
+print("\nQualified teams:", len(finalists))
+
+# STEP 10: Simulate the final.
+final_result = simulate_final(
+    teams,
+    finalists,
+    simulator
+)
+
+team1 = teams[final_result.team1_id]
+team2 = teams[final_result.team2_id]
+
+print("\n" + "=" * 65)
+print("              UEFA CONFERENCE LEAGUE FINAL")
+print("=" * 65)
+
+print(f"\n{team1.name} vs {team2.name}")
+
+print("\n90 minutes:")
+print(
+    f"{team1.name} {final_result.team1_goals} - "
+    f"{final_result.team2_goals} {team2.name}"
+)
+
+if final_result.decided_by in ("Extra time", "Penalties"):
+    print("\nExtra time:")
+    print(
+        f"{team1.name} {final_result.extra_time_team1_goals} - "
+        f"{final_result.extra_time_team2_goals} {team2.name}"
+    )
+
+if final_result.decided_by == "Penalties":
+    print("\nPenalty shootout:")
+    print(
+        f"{team1.name} {final_result.penalties_team1} - "
+        f"{final_result.penalties_team2} {team2.name}"
+    )
+
+champion = teams[final_result.winner_id]
+
+print("\n" + "=" * 65)
+print("                  TOURNAMENT CHAMPION")
+print("=" * 65)
+
+print(f"\n             🏆 {champion.name.upper()} 🏆")
+print(f"\nDecided by: {final_result.decided_by}")
+print("=" * 65)
