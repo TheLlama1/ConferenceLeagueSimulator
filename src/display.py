@@ -89,6 +89,7 @@ def show_knockout_draw(teams, ties, title):
         )
 
 
+
 def show_knockout_results(teams, ties, results, title):
     show_section(title)
 
@@ -100,28 +101,45 @@ def show_knockout_results(teams, ties, results, title):
 
         details = (
             f"First leg: {first_home.name} "
-            f"[bold]{result.first_leg_home_goals} - "
-            f"{result.first_leg_away_goals}[/bold] {first_away.name}\n"
+            f"[bold cyan]{result.first_leg_home_goals} - "
+            f"{result.first_leg_away_goals}[/bold cyan] {first_away.name}\n"
             f"Second leg: {first_away.name} "
-            f"[bold]{result.second_leg_home_goals} - "
-            f"{result.second_leg_away_goals}[/bold] {first_home.name}\n"
+            f"[bold cyan]{result.second_leg_home_goals} - "
+            f"{result.second_leg_away_goals}[/bold cyan] {first_home.name}\n"
             f"Aggregate: [bold]{result.aggregate_home} - "
             f"{result.aggregate_away}[/bold]\n"
         )
 
         if result.decided_by == "extra_time":
-            details += "[yellow]Decided after extra time[/yellow]\n"
+            details += (
+                "\n[bold yellow]EXTRA TIME[/bold yellow]\n"
+                f"Extra-time goals: "
+                f"{result.extra_time_home_goals} - "
+                f"{result.extra_time_away_goals}\n"
+            )
+
         elif result.decided_by == "penalties":
             details += (
-                f"[yellow]Decided on penalties: "
-                f"{result.penalties_home} - {result.penalties_away}[/yellow]\n"
+                "\n[bold yellow]PENALTY SHOOTOUT[/bold yellow]\n"
+                f"Penalties: [bold yellow]"
+                f"{result.penalties_home} - "
+                f"{result.penalties_away}[/bold yellow]\n"
             )
 
         winner = teams[result.winner_id]
-        details += f"\n[bold green]Qualified: {winner.name}[/bold green]"
 
-        console.print(Panel(details, border_style="green"))
+        details += (
+            f"\n[bold green]QUALIFIED: "
+            f"{winner.name}[/bold green]"
+        )
 
+        console.print(
+            Panel(
+                details,
+                border_style="green",
+                padding=(1, 2)
+            )
+        )
 
 def show_final(teams, result):
     show_section("UEFA CONFERENCE LEAGUE FINAL")
